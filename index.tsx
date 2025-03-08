@@ -52,6 +52,10 @@ export default definePlugin({
             const rule = rules.get(ruleNumber)!;
             if (!rule) return { content: SpecialMessageActions.IGNORE };
 
+            if (ctx.guild?.id === VENCORD_SERVER_ID) return {
+                content: `vrule ${ruleNumber}`
+            };
+
             return {
                 content: `-# <#${RULES_CHANNEL_ID}>\n### Rule ${ruleNumber}\n> ${rule.raw.replace("\n", "\n> ")}`
             };
