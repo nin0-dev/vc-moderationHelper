@@ -9,21 +9,25 @@ import {
     ApplicationCommandOptionType,
 } from "@api/Commands";
 import { Devs } from "@utils/constants";
-import { getCurrentChannel, getCurrentGuild } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { RestAPI } from "@webpack/common";
 
-enum SpecialMessageActions {
-    IGNORE = "__MODERATIONHELPER__IGNORE"
-}
-
-const VENCORD_SERVER_ID = "1015060230222131221";
-const RULES_CHANNEL_ID = "1015074670963335219";
+import { RULES_CHANNEL_ID, SpecialMessageActions, VENCORD_SERVER_ID } from "./constants";
+import { populateRules, rules } from "./rulesManagement";
 
 export default definePlugin({
     name: "ModerationHelper",
     description: "Helps you moderate the Vencord Server",
     authors: [Devs.nin0dev],
+    async start() {
+        populateRules();
+        setInterval(populateRules, 60 * 60 * 1000);
+    },
+    onBeforeMessageSend(_c, msg) {
+        if (msg.content === SpecialMessageActions.IGNORE) {
+            msg.content = "";
+            return;
+        }
+    },
     commands: [{
         name: "rule",
         description: "Send a Vencord Server rule [ideally it should be valid]",
@@ -36,35 +40,20 @@ export default definePlugin({
         }],
         predicate: ctx => {
             try {
-                return (getCurrentGuild()?.id === VENCORD_SERVER_ID || getCurrentChannel()?.isDM()) || true;
+                return (ctx.guild?.id === VENCORD_SERVER_ID || ctx.channel.isDM()) || true;
             }
             catch {
                 return true;
             }
         },
         execute: async (args, ctx) => {
-            const ruleNumber = args[0].value;
-            const rulesMessage = JSON.parse((await RestAPI.get({
-                url: `/channels/${RULES_CHANNEL_ID}/messages`
-            })).text)[0].content;
-
-            const rule = rulesMessage
-                .substring(
-                    rulesMessage.indexOf(`${ruleNumber}. `),
-                    rulesMessage.indexOf(`${parseInt(ruleNumber) + 1}. `) !== -1
-                        ? rulesMessage.indexOf(`${parseInt(ruleNumber) + 1}. `)
-                        : rulesMessage.length
-                )
-                .trim()
-                .replace(`${ruleNumber}. `, "");
-            if (!rule || rulesMessage.indexOf(`${ruleNumber}. `) === -1) return {
-                content: SpecialMessageActions.IGNORE
-            };
+            const ruleNumber = parseInt(args[0].value);
+            if (Number.isNaN(ruleNumber)) return { content: SpecialMessageActions.IGNORE };
+            const rule = rules.get(ruleNumber)!;
+            if (!rule) return { content: SpecialMessageActions.IGNORE };
 
             return {
-                content: `-# <#${RULES_CHANNEL_ID}>
-            ### Rule ${ruleNumber}
-            > ${rule.replace("\n", "\n> ")}`
+                content: `-# <#${RULES_CHANNEL_ID}>\n### Rule ${ruleNumber}\n> ${rule.raw.replace("\n", "\n> ")}`
             };
         }
     }]
